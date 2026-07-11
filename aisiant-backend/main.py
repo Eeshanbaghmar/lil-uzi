@@ -19,21 +19,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load Supabase from .env.local
-def load_env():
+# Load Supabase from System Env (Render) or .env.local (Local)
+def get_env_var(key):
+    # 1. Try system environment variable (Render)
+    if os.environ.get(key):
+        return os.environ.get(key)
+        
+    # 2. Try falling back to .env.local (Local)
     env_path = os.path.join(os.path.dirname(__file__), '..', '.env.local')
-    keys = {}
     if os.path.exists(env_path):
         with open(env_path, 'r') as f:
             for line in f:
-                if '=' in line and not line.startswith('#'):
-                    k, v = line.strip().split('=', 1)
-                    keys[k] = v
-    return keys
+                if line.startswith(key + '='):
+                    return line.strip().split('=', 1)[1]
+    return None
 
-env_vars = load_env()
-SUPABASE_URL = env_vars.get("VITE_SUPABASE_URL")
-SUPABASE_KEY = env_vars.get("VITE_SUPABASE_ANON_KEY")
+SUPABASE_URL = get_env_var("VITE_SUPABASE_URL")
+SUPABASE_KEY = get_env_var("VITE_SUPABASE_ANON_KEY")
+GROQ_API_KEY = get_env_var("GROQ_API_KEY")
 
 supabase: Client = None
 if SUPABASE_URL and SUPABASE_KEY:
@@ -123,8 +126,8 @@ async def chat_with_ollama(request: ChatRequest):
     Keep your response concise, formatting it beautifully with Markdown (bolding, lists, etc).
     """
 
-    ollama_payload = {
-        "model": "llama3",
+    groq_payload = {
+        "model": "llama3-70b-8192",
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": request.message}
@@ -133,9 +136,16 @@ async def chat_with_ollama(request: ChatRequest):
     }
 
     try:
-        response = requests.post("http://localhost:11434/api/chat", json=ollama_payload)
+        if not GROQ_API_KEY:
+            return {"error": "GROQ_API_KEY is not set in your environment variables!"}
+            
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=groq_payload, headers=headers)
         response.raise_for_status()
         data = response.json()
-        return {"reply": data.get("message", {}).get("content", "I am thinking...")}
+        return {"reply": data["choices"][0]["message"]["content"]}
     except Exception as e:
-        return {"error": "Failed to connect to local Ollama. Is it running? (Error: " + str(e) + ")"}
+        return {"error": "Failed to connect to Groq. (Error: " + str(e) + ")"}
