@@ -76,9 +76,11 @@ export default function ProjectWorkspace() {
     }
   }, [])
 
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (stems.length === 0) return
     const ctx = getAudioCtx()
+    if (ctx.state === 'suspended') await ctx.resume()
+    
     if (isPlaying) {
       stems.forEach(stem => {
         if (stem.sourceNode) {
@@ -108,8 +110,11 @@ export default function ProjectWorkspace() {
     }
   }
 
-  const scrubTrack = (e) => {
+  const scrubTrack = async (e) => {
     if (stems.length === 0) return
+    const ctx = getAudioCtx()
+    if (ctx.state === 'suspended') await ctx.resume()
+    
     const rect = e.currentTarget.getBoundingClientRect()
     const pct = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100))
     const maxDuration = Math.max(...stems.map(s => s.buffer.duration))
@@ -118,7 +123,6 @@ export default function ProjectWorkspace() {
     setMasterTime(newTime)
     
     if (isPlaying) {
-      const ctx = getAudioCtx()
       stems.forEach(stem => {
         if (stem.sourceNode) {
           try { stem.sourceNode.stop() } catch (e) {}
@@ -220,6 +224,10 @@ export default function ProjectWorkspace() {
 
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+      
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 60000) // 60s timeout for cold start
+      
       const response = await fetch(`${backendUrl}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -227,8 +235,11 @@ export default function ProjectWorkspace() {
           message: msgText,
           projectContext: { title: project.title, genre: project.genre },
           analysisData: analysisData
-        })
+        }),
+        signal: controller.signal
       })
+      
+      clearTimeout(timeoutId)
       
       const data = await response.json()
       setIsAiThinking(false)
@@ -240,7 +251,11 @@ export default function ProjectWorkspace() {
       }
     } catch (err) {
       setIsAiThinking(false)
-      setChatHistory(prev => [...prev, { role: 'ai', text: "⚠️ Could not connect to Python backend. Is it running on port 8000?" }])
+      if (err.name === 'AbortError') {
+        setChatHistory(prev => [...prev, { role: 'ai', text: "⚠️ The backend took too long to respond. It might be waking up (can take 50s on the free tier). Try again in a moment." }])
+      } else {
+        setChatHistory(prev => [...prev, { role: 'ai', text: "⚠️ Could not connect to Python backend. Is it running on port 8000?" }])
+      }
     }
   }
 
