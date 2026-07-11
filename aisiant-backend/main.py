@@ -131,7 +131,7 @@ async def chat_with_ollama(request: ChatRequest):
         groq_payload = {
             "model": "llama-3.1-8b-instant",  # Updated Groq model
             "messages": [
-                {"role": "system", "content": system_prompt + "\n\n" + dsp_data_str},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": request.message}
             ],
             "temperature": 0.7,
