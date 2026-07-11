@@ -151,20 +151,22 @@ export default function ProjectWorkspace() {
 
   // Handle File Upload & Backend DSP Analysis
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
 
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files)
     if (!files.length) return
     
     setIsUploading(true)
+    setUploadStatus('Decoding audio...')
     const ctx = getAudioCtx()
     const newStems = []
     
     for (const file of files) {
-      // 1. Local Web Audio Decoding (for playback)
+      setUploadStatus(`Decoding ${file.name}...`)
+      // 1. Local Web Audio Decoding (for playback) — this is fast
       try {
         const arrayBuffer = await file.arrayBuffer()
-        // Clone the buffer because decodeAudioData consumes it
         const bufferCopy = arrayBuffer.slice(0)
         const audioBuffer = await ctx.decodeAudioData(bufferCopy)
         const gainNode = ctx.createGain()
@@ -181,34 +183,30 @@ export default function ProjectWorkspace() {
         console.error("Error decoding audio:", err)
         alert(`Could not decode "${file.name}". Make sure it is a valid audio file (WAV, MP3, OGG, FLAC).`)
       }
-
-      // 2. Send to Python Backend for DSP Analysis (non-blocking)
-      try {
-        const formData = new FormData()
-        formData.append('file', file)
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
-        const response = await fetch(`${backendUrl}/analyze`, {
-          method: 'POST',
-          body: formData
-        })
-        const data = await response.json()
-        if (data.status === 'success') {
-          setAnalysisData(prev => ({
-            ...prev,
-            [file.name]: data
-          }))
-        }
-      } catch (err) {
-        console.warn("Backend DSP not reachable — stems still loaded locally.", err)
-      }
     }
 
+    // 2. Show stems IMMEDIATELY — don't wait for backend
     if (newStems.length > 0) {
       setStems(prev => [...prev, ...newStems])
     }
     setIsUploading(false)
-    // Reset file input so re-uploading the same file works
+    setUploadStatus('')
     e.target.value = ''
+
+    // 3. Fire backend DSP analysis in the BACKGROUND (non-blocking)
+    for (const file of files) {
+      const formData = new FormData()
+      formData.append('file', file)
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+      fetch(`${backendUrl}/analyze`, { method: 'POST', body: formData })
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'success') {
+            setAnalysisData(prev => ({ ...prev, [file.name]: data }))
+          }
+        })
+        .catch(err => console.warn("Backend DSP not reachable — stems still loaded locally.", err))
+    }
   }
 
   // Handle Sending Chat to Ollama
@@ -332,6 +330,13 @@ export default function ProjectWorkspace() {
 
   return (
     <section id="workspace" className="screen active">
+      {isUploading && (
+        <div className="upload-overlay">
+          <div className="upload-spinner"></div>
+          <div className="upload-text">{uploadStatus || 'Processing...'}</div>
+          <div className="upload-subtext">Your stems will appear in a moment</div>
+        </div>
+      )}
       <div className="ws-topbar">
         <div className="ws-project-id">
           <Link className="back-link" to="/dashboard">
