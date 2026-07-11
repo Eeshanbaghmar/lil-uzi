@@ -123,9 +123,28 @@ export default function Dashboard() {
                 <span className="tag">{p.genre}</span>
               </div>
               <div className="card-meta">
-                <div className="status"><span className={`status-dot ${p.status}`}></span>{statusLabel[p.status]}</div>
+                <div className="status"><span className={`status-dot ${p.status}`}></span>{statusLabel[p.status] || 'Active'}</div>
                 <div className="card-time mono">{timeAgo(p.created_at)}</div>
               </div>
+              
+              {(() => {
+                const tasksObj = p.tasks || {}
+                const completed = Object.values(tasksObj).filter(Boolean).length
+                const total = 6 // There are 6 main milestones
+                const pct = Math.round((completed / total) * 100)
+                return (
+                  <div className="card-prog global-progress">
+                    <div className="prog-label">
+                      <span>Progress</span>
+                      <span>{pct}%</span>
+                    </div>
+                    <div className="prog-track">
+                      <div className="prog-fill" style={{ width: `${pct}%` }}></div>
+                    </div>
+                  </div>
+                )
+              })()}
+              
               <CardEQ status={p.status} />
             </div>
           ))

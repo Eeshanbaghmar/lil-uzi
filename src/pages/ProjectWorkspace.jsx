@@ -15,7 +15,9 @@ const getAudioCtx = (() => {
 export default function ProjectWorkspace() {
   const { id } = useParams()
   const [project, setProject] = useState({ title: 'Loading...', genre: '' })
-  const [activeTab, setActiveTab] = useState('chat')
+  const defaultTasks = { production: false, writing: false, recording: false, arrangement: false, mixing: false, mastering: false }
+  const [tasks, setTasks] = useState(defaultTasks)
+  const [activeTab, setActiveTab] = useState('progress')
   const [isPlaying, setIsPlaying] = useState(false)
   const [stems, setStems] = useState([])
   const [masterTime, setMasterTime] = useState(0)
@@ -40,10 +42,24 @@ export default function ProjectWorkspace() {
   useEffect(() => {
     const fetchProject = async () => {
       const { data } = await supabase.from('projects').select('*').eq('id', id).single()
-      if (data) setProject(data)
+      if (data) {
+        setProject(data)
+        setTasks(data.tasks || defaultTasks)
+      }
     }
     fetchProject()
   }, [id])
+
+  // Toggle checklist task
+  const toggleTask = async (taskKey) => {
+    const newTasks = { ...tasks, [taskKey]: !tasks[taskKey] }
+    setTasks(newTasks)
+    await supabase.from('projects').update({ tasks: newTasks }).eq('id', id)
+  }
+
+  const completedTasks = Object.values(tasks).filter(Boolean).length
+  const totalTasks = Object.keys(tasks).length
+  const taskPct = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100)
 
   // Auto-scroll chat
   useEffect(() => {
@@ -313,7 +329,14 @@ export default function ProjectWorkspace() {
           </Link>
           <div className="ws-titleblock">
             <h2 id="wsTitle">{project.title}</h2>
-            <div className="sub"><span className="tag" id="wsGenre">{project.genre}</span></div>
+            <div className="sub">
+              <span className="tag" id="wsGenre">{project.genre}</span>
+              <div className="global-progress" style={{ width: '120px', marginLeft: '12px', marginTop: 0 }}>
+                <div className="prog-track">
+                  <div className="prog-fill" style={{ width: `${taskPct}%` }}></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <input 
@@ -387,9 +410,49 @@ export default function ProjectWorkspace() {
             <button className={`tab ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>Uzi Chat</button>
             <button className={`tab ${activeTab === 'lyrics' ? 'active' : ''}`} onClick={() => setActiveTab('lyrics')}>Lyrics</button>
             <button className={`tab ${activeTab === 'analyzer' ? 'active' : ''}`} onClick={() => setActiveTab('analyzer')}>Analyzer</button>
+            <button className={`tab ${activeTab === 'progress' ? 'active' : ''}`} onClick={() => setActiveTab('progress')}>Progress</button>
           </div>
 
           <div className="tab-panels">
+            {activeTab === 'progress' && (
+              <div className="tab-panel active" style={{ display: 'flex' }}>
+                <div className="progress-tab">
+                  <div className="progress-header">
+                    <h3>Project Progress</h3>
+                    <p>Track your milestones to release.</p>
+                  </div>
+                  <div className="global-progress" style={{ maxWidth: '100%', margin: '0 0 10px 0' }}>
+                    <div className="prog-label">
+                      <span>Completion</span>
+                      <span>{taskPct}%</span>
+                    </div>
+                    <div className="prog-track" style={{ height: '8px' }}>
+                      <div className="prog-fill" style={{ width: `${taskPct}%` }}></div>
+                    </div>
+                  </div>
+                  <div className="checklist">
+                    {[
+                      { key: 'production', title: 'Beat & Production', desc: 'Instrumental selected and arranged.' },
+                      { key: 'writing', title: 'Lyrics & Writing', desc: 'Verses and chorus written.' },
+                      { key: 'recording', title: 'Vocal Recording', desc: 'All main vocals and ad-libs tracked.' },
+                      { key: 'arrangement', title: 'Arrangement', desc: 'Vocals and beat structured correctly.' },
+                      { key: 'mixing', title: 'Mixing', desc: 'EQ, compression, and levels balanced.' },
+                      { key: 'mastering', title: 'Mastering', desc: 'Loudness targeted, ready for release.' }
+                    ].map(item => (
+                      <div key={item.key} className={`check-item ${tasks[item.key] ? 'checked' : ''}`} onClick={() => toggleTask(item.key)}>
+                        <div className="check-box">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </div>
+                        <div className="check-content">
+                          <div className="check-title">{item.title}</div>
+                          <div className="check-desc">{item.desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
             {activeTab === 'chat' && (
               <div className="tab-panel active">
                 <div className="chat-history">
