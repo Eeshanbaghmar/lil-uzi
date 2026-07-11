@@ -291,8 +291,8 @@ export default function ProjectWorkspace() {
         const barHeight = isPlaying ? Math.max(5, (avg / 255) * canvas.height) : (4 + Math.random() * 3)
         
         const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight)
-        gradient.addColorStop(0, 'var(--amber)')
-        gradient.addColorStop(1, 'var(--teal-dim)')
+        gradient.addColorStop(0, '#E8A33D') // amber
+        gradient.addColorStop(1, '#2E5C56') // teal-dim
         
         ctx.fillStyle = gradient
         ctx.beginPath()
