@@ -24,7 +24,10 @@ export default function ProjectWorkspace() {
   const [masterTime, setMasterTime] = useState(0)
   
   // NEW: State for Analysis and Chat
-  const [analysisData, setAnalysisData] = useState({})
+  const [analysisData, setAnalysisData] = useState(() => {
+    const saved = localStorage.getItem(`analysis_${id}`)
+    return saved ? JSON.parse(saved) : {}
+  })
   const [chatHistory, setChatHistory] = useState([
     { role: 'ai', text: 'Loaded your session. Want me to check for frequency masking?' }
   ])
@@ -245,10 +248,14 @@ export default function ProjectWorkspace() {
         .then(res => res.json())
         .then(data => {
           if (data.status === 'success') {
-            setAnalysisData(prev => ({ ...prev, [file.name]: data }))
+            setAnalysisData(prev => {
+              const newData = { ...prev, [file.name]: data }
+              localStorage.setItem(`analysis_${id}`, JSON.stringify(newData))
+              return newData
+            })
           }
         })
-        .catch(err => console.warn("Backend DSP not reachable — stems still loaded locally.", err))
+        .catch(err => console.error("Analysis failed:", err))
     }
   }
 
