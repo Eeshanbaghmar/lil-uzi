@@ -68,7 +68,12 @@ export default function ProjectWorkspace() {
               muted: false
             })
           }
-          setStems(prev => [...prev, ...loadedStems])
+          setStems(prev => {
+            // Prevent duplicates in React StrictMode
+            const existingIds = new Set(prev.map(s => s.id))
+            const uniqueNewStems = loadedStems.filter(s => !existingIds.has(s.id))
+            return [...prev, ...uniqueNewStems]
+          })
         }
       } catch (e) {
         console.error("Error loading saved stems:", e)
