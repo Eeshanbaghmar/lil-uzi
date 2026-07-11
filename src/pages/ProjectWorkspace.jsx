@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { saveStemToDB, getProjectStems } from '../lib/idb.js'
+import ReactMarkdown from 'react-markdown'
 
 // Singleton Audio Context
 const getAudioCtx = (() => {
@@ -34,6 +35,7 @@ export default function ProjectWorkspace() {
   const [chatInput, setChatInput] = useState('')
   const [isAiThinking, setIsAiThinking] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   
   const fileInputRef = useRef(null)
   const analyserRef = useRef(null)
@@ -494,12 +496,23 @@ export default function ProjectWorkspace() {
           </div>
         </div>
 
-        <div className="panel-right">
+        <div className={`panel-right ${isFullscreen ? 'fullscreen' : ''}`}>
           <div className="tabbar">
             <button className={`tab ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>Uzi Chat</button>
             <button className={`tab ${activeTab === 'lyrics' ? 'active' : ''}`} onClick={() => setActiveTab('lyrics')}>Lyrics</button>
             <button className={`tab ${activeTab === 'analyzer' ? 'active' : ''}`} onClick={() => setActiveTab('analyzer')}>Analyzer</button>
             <button className={`tab ${activeTab === 'progress' ? 'active' : ''}`} onClick={() => setActiveTab('progress')}>Progress</button>
+            <button 
+              className="tab" 
+              style={{marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px', color: '#D4AF37'}} 
+              onClick={() => setIsFullscreen(!isFullscreen)}
+            >
+              {isFullscreen ? (
+                <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg> Shrink</>
+              ) : (
+                <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg> Expand</>
+              )}
+            </button>
           </div>
 
           <div className="tab-panels">
@@ -548,7 +561,15 @@ export default function ProjectWorkspace() {
                   {chatHistory.map((msg, i) => (
                     <div key={i} className={`msg ${msg.role === 'user' ? 'user' : 'ai'}`}>
                       <div className="msg-avatar">{msg.role === 'user' ? 'Me' : 'U'}</div>
-                      <div className="msg-bubble" style={{whiteSpace: 'pre-wrap'}}>{msg.text}</div>
+                      <div className="msg-bubble" style={{whiteSpace: 'normal', wordBreak: 'break-word'}}>
+                        {msg.role === 'ai' ? (
+                          <div className="markdown-body">
+                            <ReactMarkdown>{msg.text}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          msg.text
+                        )}
+                      </div>
                     </div>
                   ))}
                   {isAiThinking && (

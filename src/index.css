@@ -305,6 +305,15 @@ button{font-family:inherit; cursor:pointer; border:none; background:none; color:
 .ws-body{ flex:1; display:flex; min-height:0; }
 .panel-left{ width:64%; border-right:1px solid var(--line-soft); display:flex; flex-direction:column; min-height:0; }
 .panel-right{ width:36%; display:flex; flex-direction:column; min-height:0; }
+.panel-right.fullscreen { position: fixed; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 999; background: var(--bg-dark); }
+
+/* Markdown Styles */
+.markdown-body { font-size: 14px; line-height: 1.6; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3 { margin-top: 14px; margin-bottom: 8px; font-weight: 700; color: #D4AF37; }
+.markdown-body p { margin-bottom: 10px; }
+.markdown-body ul { padding-left: 20px; list-style-type: disc; margin-bottom: 10px; }
+.markdown-body li { margin-bottom: 6px; }
+.markdown-body strong { color: var(--ink); font-weight: 700; }
 
 /* Transport */
 .transport{
