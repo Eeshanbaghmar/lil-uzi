@@ -33,6 +33,7 @@ export default function ProjectWorkspace() {
   ])
   const [chatInput, setChatInput] = useState('')
   const [isAiThinking, setIsAiThinking] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   
   const fileInputRef = useRef(null)
   const analyserRef = useRef(null)
@@ -240,6 +241,7 @@ export default function ProjectWorkspace() {
     e.target.value = ''
 
     // 3. Fire backend DSP analysis in the BACKGROUND (non-blocking)
+    setIsAnalyzing(true)
     for (const file of files) {
       const formData = new FormData()
       formData.append('file', file)
@@ -256,6 +258,7 @@ export default function ProjectWorkspace() {
           }
         })
         .catch(err => console.error("Analysis failed:", err))
+        .finally(() => setIsAnalyzing(false))
     }
   }
 
@@ -408,6 +411,11 @@ export default function ProjectWorkspace() {
             <h2 id="wsTitle">{project.title}</h2>
             <div className="sub">
               <span className="tag" id="wsGenre">{project.genre}</span>
+              {isAnalyzing && (
+                <span className="tag" style={{ color: '#D4AF37', borderColor: '#D4AF37', animation: 'pulse 2s infinite' }}>
+                  AI ANALYZING AUDIO...
+                </span>
+              )}
               <div className="global-progress" style={{ width: '120px', marginLeft: '12px', marginTop: 0 }}>
                 <div className="prog-track">
                   <div className="prog-fill" style={{ width: `${taskPct}%` }}></div>
