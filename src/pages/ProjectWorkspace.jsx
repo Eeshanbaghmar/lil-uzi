@@ -455,11 +455,21 @@ export default function ProjectWorkspace() {
                       {Object.values(analysisData).map((data, i) => (
                         <div key={i} style={{ marginBottom: '8px', fontFamily: 'var(--font-mono)' }}>
                           <div>File: {data.filename}</div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '4px' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '4px', marginTop: '4px' }}>
                             <div>BPM: {data.bpm}</div>
-                            <div>RMS: {data.rms_db} dB</div>
-                            <div>Peak: {data.peak_db} dB</div>
-                            <div>Timbre: {data.spectral_centroid} Hz</div>
+                            <div style={{ marginTop: '8px', fontWeight: 600, color: 'var(--ink)' }}>Timeline Analysis (15s chunks):</div>
+                            <div style={{ maxHeight: '200px', overflowY: 'auto', background: 'var(--surface-sunken)', padding: '8px', borderRadius: '4px' }}>
+                              {data.segments && data.segments.map((seg, idx) => (
+                                <div key={idx} style={{ marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid var(--border)' }}>
+                                  <div style={{ color: 'var(--teal)' }}>{seg.time}</div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                                    <div>RMS: {seg.rms_db} dB</div>
+                                    <div>Peak: {seg.peak_db} dB</div>
+                                    <div style={{ gridColumn: 'span 2' }}>Timbre: {seg.spectral_centroid} Hz</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       ))}

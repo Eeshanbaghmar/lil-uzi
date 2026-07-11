@@ -64,24 +64,45 @@ async def analyze_audio(file: UploadFile = File(...)):
         tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
         bpm = float(tempo[0]) if isinstance(tempo, np.ndarray) else float(tempo)
         
-        rms = librosa.feature.rms(y=y)
-        avg_rms = float(np.mean(rms))
-        dbfs = 20 * np.log10(avg_rms + 1e-6)
+        # We will split the track into 15-second chunks
+        chunk_duration = 15.0
+        samples_per_chunk = int(chunk_duration * sr)
+        total_samples = len(y)
+        segments = []
         
-        cent = librosa.feature.spectral_centroid(y=y, sr=sr)
-        avg_cent = float(np.mean(cent))
-        
-        peak = float(np.max(np.abs(y)))
-        peak_db = 20 * np.log10(peak + 1e-6)
-        
+        for start_sample in range(0, total_samples, samples_per_chunk):
+            end_sample = min(start_sample + samples_per_chunk, total_samples)
+            y_chunk = y[start_sample:end_sample]
+            
+            # RMS
+            rms = librosa.feature.rms(y=y_chunk)
+            avg_rms = float(np.mean(rms))
+            dbfs = 20 * np.log10(avg_rms + 1e-6)
+            
+            # Centroid
+            cent = librosa.feature.spectral_centroid(y=y_chunk, sr=sr)
+            avg_cent = float(np.mean(cent))
+            
+            # Peak
+            peak = float(np.max(np.abs(y_chunk)))
+            peak_db = 20 * np.log10(peak + 1e-6)
+            
+            start_time = round(start_sample / sr, 1)
+            end_time = round(end_sample / sr, 1)
+            
+            segments.append({
+                "time": f"{start_time}s - {end_time}s",
+                "rms_db": round(dbfs, 2),
+                "peak_db": round(peak_db, 2),
+                "spectral_centroid": round(avg_cent, 2)
+            })
+            
         os.remove(temp_path)
         
         return {
             "filename": file.filename,
             "bpm": round(bpm, 1),
-            "rms_db": round(dbfs, 2),
-            "peak_db": round(peak_db, 2),
-            "spectral_centroid": round(avg_cent, 2),
+            "segments": segments,
             "status": "success"
         }
     except Exception as e:
@@ -115,7 +136,7 @@ async def chat_with_ollama(request: ChatRequest):
     The user is working on a track called '{request.projectContext.get('title', 'Untitled')}' 
     (Genre: {request.projectContext.get('genre', 'Unknown')}).
     
-    DSP AUDIO ANALYSIS DATA FOR THIS PROJECT:
+    DSP AUDIO ANALYSIS DATA (Segmented by 15-second chunks):
     {json.dumps(request.analysisData, indent=2)}
     
     {rag_context}
