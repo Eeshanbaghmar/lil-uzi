@@ -20,12 +20,21 @@ export default function ProjectWorkspace() {
   const [stems, setStems] = useState([])
   const [masterTime, setMasterTime] = useState(0)
   
+  // NEW: State for Analysis and Chat
+  const [analysisData, setAnalysisData] = useState({})
+  const [chatHistory, setChatHistory] = useState([
+    { role: 'ai', text: 'Loaded your session. Want me to check for frequency masking?' }
+  ])
+  const [chatInput, setChatInput] = useState('')
+  const [isAiThinking, setIsAiThinking] = useState(false)
+  
   const fileInputRef = useRef(null)
   const analyserRef = useRef(null)
   const canvasRef = useRef(null)
   const reqAnimRef = useRef(null)
   const startTimeRef = useRef(0)
   const progressIntervalRef = useRef(null)
+  const chatEndRef = useRef(null)
 
   // Fetch project details
   useEffect(() => {
@@ -35,6 +44,11 @@ export default function ProjectWorkspace() {
     }
     fetchProject()
   }, [id])
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [chatHistory])
 
   // Initialize analyser on mount
   useEffect(() => {
@@ -46,12 +60,10 @@ export default function ProjectWorkspace() {
     }
   }, [])
 
-  // Handle Play/Pause
   const togglePlay = () => {
     if (stems.length === 0) return
     const ctx = getAudioCtx()
     if (isPlaying) {
-      // Stop all sources
       stems.forEach(stem => {
         if (stem.sourceNode) {
           try { stem.sourceNode.stop() } catch (e) { /* ignore */ }
@@ -60,7 +72,6 @@ export default function ProjectWorkspace() {
       clearInterval(progressIntervalRef.current)
       setIsPlaying(false)
     } else {
-      // Start all sources
       const now = ctx.currentTime
       startTimeRef.current = now - masterTime
       
@@ -81,7 +92,6 @@ export default function ProjectWorkspace() {
     }
   }
 
-  // Scrub Track
   const scrubTrack = (e) => {
     if (stems.length === 0) return
     const rect = e.currentTarget.getBoundingClientRect()
@@ -91,18 +101,14 @@ export default function ProjectWorkspace() {
     
     setMasterTime(newTime)
     
-    // If playing, we need to restart playback from new time
     if (isPlaying) {
       const ctx = getAudioCtx()
-      
-      // Stop current
       stems.forEach(stem => {
         if (stem.sourceNode) {
           try { stem.sourceNode.stop() } catch (e) {}
         }
       })
       
-      // Restart
       startTimeRef.current = ctx.currentTime - newTime
       const newStems = stems.map(stem => {
         const source = ctx.createBufferSource()
@@ -115,7 +121,6 @@ export default function ProjectWorkspace() {
     }
   }
 
-  // Handle Mute toggle
   const toggleMute = (stemId, e) => {
     e.stopPropagation()
     setStems(prev => prev.map(stem => {
@@ -128,7 +133,7 @@ export default function ProjectWorkspace() {
     }))
   }
 
-  // Handle File Upload
+  // Handle File Upload & Backend DSP Analysis
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files)
     if (!files.length) return
@@ -137,6 +142,7 @@ export default function ProjectWorkspace() {
     const newStems = []
     
     for (const file of files) {
+      // 1. Local Web Audio Decoding (for playback)
       try {
         const arrayBuffer = await file.arrayBuffer()
         const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
@@ -153,11 +159,66 @@ export default function ProjectWorkspace() {
       } catch (err) {
         console.error("Error decoding audio:", err)
       }
+
+      // 2. Send to Python Backend for DSP Analysis
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      try {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+        const response = await fetch(`${backendUrl}/analyze`, {
+          method: 'POST',
+          body: formData
+        })
+        const data = await response.json()
+        if (data.status === 'success') {
+          setAnalysisData(prev => ({
+            ...prev,
+            [file.name]: data
+          }))
+        }
+      } catch (err) {
+        console.error("Backend DSP error (make sure Python server is running):", err)
+      }
     }
     setStems(prev => [...prev, ...newStems])
   }
 
-  // Formatting time helper
+  // Handle Sending Chat to Ollama
+  const sendChatMessage = async () => {
+    if (!chatInput.trim()) return
+    
+    const msgText = chatInput
+    setChatInput('')
+    setChatHistory(prev => [...prev, { role: 'user', text: msgText }])
+    setIsAiThinking(true)
+
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
+      const response = await fetch(`${backendUrl}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: msgText,
+          projectContext: { title: project.title, genre: project.genre },
+          analysisData: analysisData
+        })
+      })
+      
+      const data = await response.json()
+      setIsAiThinking(false)
+      
+      if (data.error) {
+        setChatHistory(prev => [...prev, { role: 'ai', text: `⚠️ Error: ${data.error}` }])
+      } else {
+        setChatHistory(prev => [...prev, { role: 'ai', text: data.reply }])
+      }
+    } catch (err) {
+      setIsAiThinking(false)
+      setChatHistory(prev => [...prev, { role: 'ai', text: "⚠️ Could not connect to Python backend. Is it running on port 8000?" }])
+    }
+  }
+
   const formatTime = (secs) => {
     if (isNaN(secs)) return '00:00'
     const mins = Math.floor(secs / 60)
@@ -168,7 +229,6 @@ export default function ProjectWorkspace() {
   const maxDuration = stems.length > 0 ? Math.max(...stems.map(s => s.buffer.duration)) : 0
   const progressPct = maxDuration > 0 ? (masterTime / maxDuration) * 100 : 0
 
-  // Eq Component for Stems
   const StemEQ = ({ playing }) => {
     const eqRef = useRef(null)
     useEffect(() => {
@@ -190,7 +250,6 @@ export default function ProjectWorkspace() {
     return <div className="stem-wave eq" ref={eqRef} style={{ opacity: playing ? 1 : 0.5 }}></div>
   }
 
-  // Draw Analyzer
   useEffect(() => {
     if (activeTab !== 'analyzer' || !canvasRef.current || !analyserRef.current) return
     
@@ -205,19 +264,14 @@ export default function ProjectWorkspace() {
       analyser.getByteFrequencyData(dataArray)
       
       ctx.clearRect(0, 0, canvas.width, canvas.height)
-      
       const barWidth = (canvas.width / 48)
       let x = 0
       
       for (let i = 0; i < 48; i++) {
-        // Average the data chunk
         const chunk = Math.floor(bufferLength / 48)
         let sum = 0
-        for (let j = 0; j < chunk; j++) {
-          sum += dataArray[(i * chunk) + j]
-        }
+        for (let j = 0; j < chunk; j++) { sum += dataArray[(i * chunk) + j] }
         const avg = sum / chunk
-        
         const barHeight = isPlaying ? Math.max(5, (avg / 255) * canvas.height) : (4 + Math.random() * 3)
         
         const gradient = ctx.createLinearGradient(0, canvas.height, 0, canvas.height - barHeight)
@@ -225,11 +279,9 @@ export default function ProjectWorkspace() {
         gradient.addColorStop(1, 'var(--teal-dim)')
         
         ctx.fillStyle = gradient
-        // border radius effect by drawing rounded rect
         ctx.beginPath()
         ctx.roundRect(x, canvas.height - barHeight, Math.max(2, barWidth - 4), barHeight, [3, 3, 0, 0])
         ctx.fill()
-        
         x += barWidth
       }
     }
@@ -237,11 +289,9 @@ export default function ProjectWorkspace() {
     return () => cancelAnimationFrame(reqAnimRef.current)
   }, [activeTab, isPlaying])
 
-  // Word count logic
   const [lyrics, setLyrics] = useState('[Verse 1]\nStreetlight flicker, 3 a.m. call\nMidnight blues on the studio wall')
   const wordCount = lyrics.trim().split(/\s+/).filter(Boolean).length
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stems.forEach(stem => {
@@ -281,7 +331,6 @@ export default function ProjectWorkspace() {
       </div>
 
       <div className="ws-body">
-        {/* LEFT: AUDIO ENGINE */}
         <div className="panel-left">
           <div className="transport">
             <button className="transport-play" onClick={togglePlay} disabled={stems.length === 0}>
@@ -301,7 +350,10 @@ export default function ProjectWorkspace() {
                 <span>{formatTime(maxDuration)}</span>
               </div>
             </div>
-            <div className="transport-bpm"><div className="val">128</div><div className="lbl">BPM</div></div>
+            <div className="transport-bpm">
+               <div className="val">{Object.keys(analysisData).length > 0 ? Object.values(analysisData)[0].bpm : '--'}</div>
+               <div className="lbl">BPM</div>
+            </div>
           </div>
 
           <div className="stem-header">
@@ -330,7 +382,6 @@ export default function ProjectWorkspace() {
           </div>
         </div>
 
-        {/* RIGHT: INTERACTIVE TOOLS */}
         <div className="panel-right">
           <div className="tabbar">
             <button className={`tab ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>Uzi Chat</button>
@@ -339,25 +390,39 @@ export default function ProjectWorkspace() {
           </div>
 
           <div className="tab-panels">
-            {/* CHAT */}
             {activeTab === 'chat' && (
               <div className="tab-panel active">
                 <div className="chat-history">
-                  <div className="msg ai">
-                    <div className="msg-avatar">U</div>
-                    <div className="msg-bubble">Loaded your session. Want me to check for frequency masking?</div>
-                  </div>
+                  {chatHistory.map((msg, i) => (
+                    <div key={i} className={`msg ${msg.role === 'user' ? 'user' : 'ai'}`}>
+                      <div className="msg-avatar">{msg.role === 'user' ? 'Me' : 'U'}</div>
+                      <div className="msg-bubble" style={{whiteSpace: 'pre-wrap'}}>{msg.text}</div>
+                    </div>
+                  ))}
+                  {isAiThinking && (
+                    <div className="msg ai">
+                      <div className="msg-avatar">U</div>
+                      <div className="msg-bubble" style={{ opacity: 0.7 }}>Analyzing...</div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
                 </div>
                 <div className="chat-input-row">
-                  <input type="text" placeholder="Talk to Uzi about this session…" />
-                  <button className="chat-send" aria-label="Send">
+                  <input 
+                    type="text" 
+                    placeholder="Talk to Uzi about this session…" 
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && sendChatMessage()}
+                    disabled={isAiThinking}
+                  />
+                  <button className="chat-send" onClick={sendChatMessage} disabled={isAiThinking}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* LYRICS */}
             {activeTab === 'lyrics' && (
               <div className="tab-panel active">
                 <div className="lyrics-panel">
@@ -375,7 +440,6 @@ export default function ProjectWorkspace() {
               </div>
             )}
 
-            {/* ANALYZER */}
             {activeTab === 'analyzer' && (
               <div className="tab-panel active">
                 <div className="analyzer-panel">
@@ -383,6 +447,24 @@ export default function ProjectWorkspace() {
                   <div className="analyzer-caption">
                     {isPlaying ? 'Live · analyzing mix' : 'Paused · press play to analyze'}
                   </div>
+                  
+                  {/* Show DSP Data */}
+                  {Object.keys(analysisData).length > 0 && (
+                    <div style={{ width: '100%', marginTop: '20px', padding: '16px', background: 'var(--surface)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--ink)' }}>
+                      <div style={{ fontWeight: 600, marginBottom: '8px', color: 'var(--amber)' }}>DSP Report from Backend</div>
+                      {Object.values(analysisData).map((data, i) => (
+                        <div key={i} style={{ marginBottom: '8px', fontFamily: 'var(--font-mono)' }}>
+                          <div>File: {data.filename}</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '4px' }}>
+                            <div>BPM: {data.bpm}</div>
+                            <div>RMS: {data.rms_db} dB</div>
+                            <div>Peak: {data.peak_db} dB</div>
+                            <div>Timbre: {data.spectral_centroid} Hz</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
