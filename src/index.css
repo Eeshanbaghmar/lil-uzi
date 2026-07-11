@@ -305,7 +305,7 @@ button{font-family:inherit; cursor:pointer; border:none; background:none; color:
 .ws-body{ flex:1; display:flex; min-height:0; }
 .panel-left{ width:64%; border-right:1px solid var(--line-soft); display:flex; flex-direction:column; min-height:0; }
 .panel-right{ width:36%; display:flex; flex-direction:column; min-height:0; }
-.panel-right.fullscreen { position: fixed; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 999; background: var(--bg-dark); }
+.panel-right.fullscreen { position: fixed; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 999; background: var(--bg); }
 
 /* Markdown Styles */
 .markdown-body { font-size: 14px; line-height: 1.6; }
