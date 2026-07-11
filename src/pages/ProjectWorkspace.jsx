@@ -150,10 +150,13 @@ export default function ProjectWorkspace() {
   }
 
   // Handle File Upload & Backend DSP Analysis
+  const [isUploading, setIsUploading] = useState(false)
+
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files)
     if (!files.length) return
     
+    setIsUploading(true)
     const ctx = getAudioCtx()
     const newStems = []
     
@@ -161,7 +164,9 @@ export default function ProjectWorkspace() {
       // 1. Local Web Audio Decoding (for playback)
       try {
         const arrayBuffer = await file.arrayBuffer()
-        const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
+        // Clone the buffer because decodeAudioData consumes it
+        const bufferCopy = arrayBuffer.slice(0)
+        const audioBuffer = await ctx.decodeAudioData(bufferCopy)
         const gainNode = ctx.createGain()
         
         newStems.push({
@@ -174,13 +179,13 @@ export default function ProjectWorkspace() {
         })
       } catch (err) {
         console.error("Error decoding audio:", err)
+        alert(`Could not decode "${file.name}". Make sure it is a valid audio file (WAV, MP3, OGG, FLAC).`)
       }
 
-      // 2. Send to Python Backend for DSP Analysis
-      const formData = new FormData()
-      formData.append('file', file)
-      
+      // 2. Send to Python Backend for DSP Analysis (non-blocking)
       try {
+        const formData = new FormData()
+        formData.append('file', file)
         const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000'
         const response = await fetch(`${backendUrl}/analyze`, {
           method: 'POST',
@@ -194,10 +199,16 @@ export default function ProjectWorkspace() {
           }))
         }
       } catch (err) {
-        console.error("Backend DSP error (make sure Python server is running):", err)
+        console.warn("Backend DSP not reachable — stems still loaded locally.", err)
       }
     }
-    setStems(prev => [...prev, ...newStems])
+
+    if (newStems.length > 0) {
+      setStems(prev => [...prev, ...newStems])
+    }
+    setIsUploading(false)
+    // Reset file input so re-uploading the same file works
+    e.target.value = ''
   }
 
   // Handle Sending Chat to Ollama
@@ -347,9 +358,13 @@ export default function ProjectWorkspace() {
           multiple
           onChange={handleFileUpload}
         />
-        <button className="upload-btn" onClick={() => fileInputRef.current?.click()}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v14M6 9l6-6 6 6M4 21h16"/></svg> 
-          Upload Stem
+        <button className="upload-btn" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+          {isUploading ? (
+            <>⏳ Processing...</>
+          ) : (
+            <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 3v14M6 9l6-6 6 6M4 21h16"/></svg> 
+            Upload Stem</>
+          )}
         </button>
       </div>
 
