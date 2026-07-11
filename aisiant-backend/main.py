@@ -6,7 +6,6 @@ import numpy as np
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
 from supabase import create_client, Client
 
 app = FastAPI(title="AISIANT Audio Backend")
@@ -41,10 +40,6 @@ GROQ_API_KEY = get_env_var("GROQ_API_KEY")
 supabase: Client = None
 if SUPABASE_URL and SUPABASE_KEY:
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# Load Local Embedding Model
-print("Loading sentence-transformer model for RAG...")
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 class ChatRequest(BaseModel):
     message: str
@@ -110,26 +105,8 @@ async def analyze_audio(file: UploadFile = File(...)):
 
 @app.post("/chat")
 async def chat_with_ollama(request: ChatRequest):
-    # 1. RAG Retrieval - Find relevant mixing knowledge
+    # 1. RAG Retrieval disabled to speed up cold starts
     rag_context = ""
-    try:
-        if supabase:
-            # Create embedding of the user's question
-            query_embedding = embedding_model.encode(request.message).tolist()
-            
-            # Query Supabase via Postgres RPC function we will create
-            res = supabase.rpc('match_knowledge', {
-                'query_embedding': query_embedding,
-                'match_threshold': 0.3,
-                'match_count': 2
-            }).execute()
-            
-            if res.data and len(res.data) > 0:
-                rag_context = "REFERENCE KNOWLEDGE DATABASE:\n"
-                for match in res.data:
-                    rag_context += f"- {match['title']}: {match['content']}\n"
-    except Exception as e:
-        print("RAG Search failed:", e)
 
     # 2. Build the System Prompt
     system_prompt = f"""You are Lil Uzi, an expert Grammy-winning mixing engineer and music co-producer.
@@ -164,7 +141,7 @@ async def chat_with_ollama(request: ChatRequest):
             "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json"
         }
-        response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=groq_payload, headers=headers)
+        response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=groq_payload, headers=headers, timeout=20)
         response.raise_for_status()
         data = response.json()
         return {"reply": data["choices"][0]["message"]["content"]}
