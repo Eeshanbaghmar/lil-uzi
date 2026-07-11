@@ -124,25 +124,29 @@ async def chat_with_ollama(request: ChatRequest):
     Keep your response concise, formatting it beautifully with Markdown (bolding, lists, etc).
     """
 
-    groq_payload = {
-        "model": "llama3-70b-8192",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": request.message}
-        ],
-        "stream": False
-    }
-
     try:
         if not GROQ_API_KEY:
             return {"error": "GROQ_API_KEY is not set in your environment variables!"}
-            
+        
+        groq_payload = {
+            "model": "llama-3.1-8b-instant",  # Updated Groq model
+            "messages": [
+                {"role": "system", "content": system_prompt + "\n\n" + dsp_data_str},
+                {"role": "user", "content": request.message}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 512
+        }
+        
         headers = {
             "Authorization": f"Bearer {GROQ_API_KEY}",
             "Content-Type": "application/json"
         }
         response = requests.post("https://api.groq.com/openai/v1/chat/completions", json=groq_payload, headers=headers, timeout=20)
-        response.raise_for_status()
+        
+        if response.status_code != 200:
+            return {"error": f"Groq API Error {response.status_code}: {response.text}"}
+            
         data = response.json()
         return {"reply": data["choices"][0]["message"]["content"]}
     except Exception as e:

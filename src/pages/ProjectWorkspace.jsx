@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { saveStemToDB, getProjectStems } from '../lib/idb.js'
 
 // Singleton Audio Context
 const getAudioCtx = (() => {
@@ -38,7 +39,7 @@ export default function ProjectWorkspace() {
   const progressIntervalRef = useRef(null)
   const chatEndRef = useRef(null)
 
-  // Fetch project details
+  // Fetch project details and saved stems
   useEffect(() => {
     const fetchProject = async () => {
       const { data } = await supabase.from('projects').select('*').eq('id', id).single()
@@ -47,7 +48,35 @@ export default function ProjectWorkspace() {
         setTasks(data.tasks || defaultTasks)
       }
     }
+    
+    const loadSavedStems = async () => {
+      try {
+        const saved = await getProjectStems(id)
+        if (saved && saved.length > 0) {
+          const ctx = getAudioCtx()
+          const loadedStems = []
+          for (const item of saved) {
+            const bufferCopy = item.buffer.slice(0)
+            const audioBuffer = await ctx.decodeAudioData(bufferCopy)
+            const gainNode = ctx.createGain()
+            loadedStems.push({
+              id: item.stemId,
+              name: item.name,
+              buffer: audioBuffer,
+              gainNode: gainNode,
+              sourceNode: null,
+              muted: false
+            })
+          }
+          setStems(prev => [...prev, ...loadedStems])
+        }
+      } catch (e) {
+        console.error("Error loading saved stems:", e)
+      }
+    }
+    
     fetchProject()
+    loadSavedStems()
   }, [id])
 
   // Toggle checklist task
@@ -172,11 +201,16 @@ export default function ProjectWorkspace() {
       try {
         const arrayBuffer = await file.arrayBuffer()
         const bufferCopy = arrayBuffer.slice(0)
+        
+        // Save to IndexedDB for persistence
+        const stemId = Date.now() + Math.random()
+        await saveStemToDB(id, stemId, file.name, arrayBuffer)
+        
         const audioBuffer = await ctx.decodeAudioData(bufferCopy)
         const gainNode = ctx.createGain()
         
         newStems.push({
-          id: Date.now() + Math.random(),
+          id: stemId,
           name: file.name,
           buffer: audioBuffer,
           gainNode: gainNode,
